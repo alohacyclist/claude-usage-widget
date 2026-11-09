@@ -1,0 +1,36 @@
+/* Errors */
+"No Claude Code login found in the keychain." = "Kein Claude-Code-Login im Schlüsselbund gefunden.";
+"Token expired – open Claude Code once." = "Token abgelaufen – Claude Code einmal öffnen.";
+"Rate limited – next try at %@." = "Zu viele Abfragen – nächster Versuch um %@.";
+"Rate limited – retrying shortly." = "Zu viele Abfragen – nächster Versuch gleich.";
+"Server responded with HTTP %lld." = "Server antwortet mit HTTP %lld.";
+"Offline: %@" = "Offline: %@";
+
+/* Times */
+"%lld d %lld h" = "%lld T %lld h";
+"%lld h %lld min" = "%lld h %lld min";
+"%lld min" = "%lld min";
+"tomorrow %@" = "morgen %@";
+"just now" = "gerade eben";
+"%lld min ago" = "vor %lld min";
+
+/* Usage rows */
+"Session (5 h)" = "Session (5 h)";
+"Week (7 d)" = "Woche (7 T)";
+"5h" = "5h";
+"7d" = "7T";
+"Starts with your next request" = "Startet mit der nächsten Anfrage";
+"Resets %@ · in %@" = "Reset %@ · in %@";
+"Limit reached" = "Limit erreicht";
+"Limit around %@ at this pace" = "Limit ca. %@ bei diesem Tempo";
+"Forecast at reset: %@" = "Prognose bis Reset: %@";
+
+/* Menus */
+"Refresh" = "Aktualisieren";
+"Show details" = "Details anzeigen";
+"Show compact" = "Kompakt anzeigen";
+"Hide window" = "Fenster ausblenden";
+"Quit" = "Beenden";
+"Floating window" = "Schwebendes Fenster";
+"Percentages in the menu bar" = "Prozente in der Menüleiste";
+"Launch at login" = "Beim Login starten";
