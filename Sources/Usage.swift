@@ -167,18 +167,19 @@ final class UsageStore: ObservableObject {
     @Published private(set) var lastUpdate: Date?
     @Published private(set) var error: UsageError?
     @Published private(set) var isLoading = false
-    @Published private(set) var commandStatus: CommandStatus?
+    @Published private(set) var commandRows: [CommandStatus] = []
     @Published private(set) var commandError: CommandError?
 
     @Published var showFloating: Bool { didSet { defaults.set(showFloating, forKey: Keys.showFloating) } }
     @Published var showPercentInMenuBar: Bool { didSet { defaults.set(showPercentInMenuBar, forKey: Keys.menuBarText) } }
+    @Published var showCommandInMenuBar: Bool { didSet { defaults.set(showCommandInMenuBar, forKey: Keys.menuBarCommand) } }
     @Published var compact: Bool { didSet { defaults.set(compact, forKey: Keys.compact) } }
 
     /// Plans without a 5-hour window get `five_hour: null`; until the first successful fetch both rows stay as placeholders.
     var showsSession: Bool { session != nil || lastUpdate == nil }
-    var showsCommandRow: Bool { customCommand != nil || commandStatus != nil }
+    var showsCommandRows: Bool { customCommand != nil || !commandRows.isEmpty }
 
-    /// Shell command for the extra row; set with `defaults write`, read once at launch.
+    /// Shell command for the extra rows; set with `defaults write`, read once at launch.
     let customCommand: String?
 
     private let defaults: UserDefaults
@@ -193,6 +194,7 @@ final class UsageStore: ObservableObject {
     enum Keys {
         static let showFloating = "showFloating"
         static let menuBarText = "showPercentInMenuBar"
+        static let menuBarCommand = "showCustomRowsInMenuBar"
         static let compact = "compact"
         static let customCommand = "customRowCommand"
         static let customInterval = "customRowInterval"
@@ -202,6 +204,7 @@ final class UsageStore: ObservableObject {
         self.defaults = defaults
         showFloating = defaults.object(forKey: Keys.showFloating) as? Bool ?? true
         showPercentInMenuBar = defaults.object(forKey: Keys.menuBarText) as? Bool ?? true
+        showCommandInMenuBar = defaults.object(forKey: Keys.menuBarCommand) as? Bool ?? true
         compact = defaults.object(forKey: Keys.compact) as? Bool ?? false
         let command = defaults.string(forKey: Keys.customCommand)?.trimmingCharacters(in: .whitespacesAndNewlines)
         customCommand = command?.isEmpty == false ? command : nil
@@ -210,13 +213,13 @@ final class UsageStore: ObservableObject {
 
     /// Fixed data for screenshots and previews; never polls.
     static func sample(
-        session: UsageWindow?, weekly: UsageWindow?, updated: Date, command: CommandStatus? = nil
+        session: UsageWindow?, weekly: UsageWindow?, updated: Date, command: [CommandStatus] = []
     ) -> UsageStore {
         let store = UsageStore(defaults: UserDefaults(suiteName: "sample") ?? .standard)
         store.session = session
         store.weekly = weekly
         store.lastUpdate = updated
-        store.commandStatus = command
+        store.commandRows = command
         return store
     }
 
@@ -237,7 +240,7 @@ final class UsageStore: ObservableObject {
         Task { await refreshAll() }
     }
 
-    /// Opening the menu refreshes usage after 30 s and the command row after 5 min.
+    /// Opening the menu refreshes usage after 30 s and the command rows after 5 min.
     func refreshIfStale(maxAge: TimeInterval = 30) async {
         async let command: Void = refreshCommand(maxAge: 300)
         if lastUpdate == nil || Date().timeIntervalSince(lastUpdate ?? .distantPast) >= maxAge {
@@ -258,7 +261,7 @@ final class UsageStore: ObservableObject {
         isRunningCommand = true
         defer { isRunningCommand = false }
         do {
-            commandStatus = try await CommandRunner.run(customCommand)
+            commandRows = try await CommandRunner.run(customCommand)
             commandError = nil
         } catch let error as CommandError {
             commandError = error

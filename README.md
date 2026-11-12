@@ -15,7 +15,7 @@ A tiny native macOS widget for the 5-hour session and the weekly limit, floating
 - **Menu bar:** a gauge icon with both percentages. Click it for the details and the settings (floating panel, menu bar text, launch at login).
 - **Pace tick:** the mark on each bar shows how much of the window has passed. If the fill is right of the tick, you are burning faster than an even pace.
 - **Forecast:** extrapolates your average rate so far to the reset. When you are on track to hit 100 % early, the row turns amber and tells you when ("Limit around 4:04 PM at this pace"). At 90 % it turns red.
-- **Custom row (optional):** one extra line fed by your own script, e.g. hours tracked today or a build status.
+- **Custom rows (optional):** extra lines fed by your own script, e.g. hours tracked today or a build status, also next to the percentages in the menu bar.
 - **Native and small:** SwiftUI and AppKit, no dependencies, no Xcode project. English and German, and it follows your system's 12/24-hour setting.
 
 ## Install
@@ -49,15 +49,15 @@ Claude Code stores its OAuth login in the macOS keychain (`Claude Code-credentia
 - The token goes to `api.anthropic.com` and nowhere else. No analytics, no other network calls. Settings live in `UserDefaults`.
 - If macOS asks whether `security` may read the keychain item, choose **Always Allow**.
 
-## Custom row
+## Custom rows
 
-Point the widget at a shell command. It runs with `/bin/zsh -c` at launch, every hour, after wake, when you open the menu (if older than 5 minutes) and on **Refresh**. The last non-empty line of its output must be a JSON object:
+Point the widget at a shell command. It runs with `/bin/zsh -c` at launch, every hour, after wake, when you open the menu (if older than 5 minutes) and on **Refresh**. The last non-empty line of its output must be a JSON object, or an array of them for several rows:
 
 ```json
 {"title": "Today", "value": "4:05h", "detail": "2 sessions active", "active": true}
 ```
 
-`detail` and `active` are optional; `active` adds a green or gray dot. On a non-zero exit, a timeout (30 s) or other output, the row keeps the last value and shows the error.
+`detail`, `active`, `level` and `highlight` are optional. `active` adds a green or gray dot. `level` is `ok`, `warning` or `critical`; the last two color the dot and the value amber or red. The compact pill and the menu bar show the value of the first row plus every row with a warning or critical level or `"highlight": true`; **Custom rows in the menu bar** in the menu turns the menu bar part off. On a non-zero exit, a timeout (30 s) or other output, the rows keep their last values and show the error.
 
 ```bash
 defaults write de.christianm.claude-usage customRowCommand '/path/to/your/status-script'

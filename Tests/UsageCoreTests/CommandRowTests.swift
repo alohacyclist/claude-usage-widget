@@ -9,14 +9,42 @@ import Testing
         {"title": "Today", "value": "4:05h", "detail": "2 sessions active", "active": true}
 
         """
-        let status = try CommandRunner.parse(output)
-        #expect(status == CommandStatus(title: "Today", value: "4:05h", detail: "2 sessions active", active: true))
+        let rows = try CommandRunner.parse(output)
+        #expect(rows == [CommandStatus(title: "Today", value: "4:05h", detail: "2 sessions active", active: true)])
     }
 
-    @Test func detailAndActiveAreOptional() throws {
-        let status = try CommandRunner.parse(#"{"title": "Build", "value": "green"}"#)
-        #expect(status.detail == nil)
-        #expect(status.active == nil)
+    @Test func detailActiveAndLevelAreOptional() throws {
+        let rows = try CommandRunner.parse(#"{"title": "Build", "value": "green"}"#)
+        #expect(rows == [CommandStatus(title: "Build", value: "green")])
+    }
+
+    @Test func parsesAnArrayAsSeveralRows() throws {
+        let rows = try CommandRunner.parse(#"[{"title": "A", "value": "1"}, {"title": "B", "value": "2", "level": "warning"}]"#)
+        #expect(rows == [CommandStatus(title: "A", value: "1"), CommandStatus(title: "B", value: "2", level: .warning)])
+    }
+
+    @Test func parsesTheHighlightFlag() throws {
+        let rows = try CommandRunner.parse(#"{"title": "A", "value": "1", "highlight": true}"#)
+        #expect(rows == [CommandStatus(title: "A", value: "1", highlight: true)])
+    }
+
+    @Test func rejectsAnUnknownLevel() {
+        #expect(throws: CommandError.invalidOutput) {
+            try CommandRunner.parse(#"{"title": "A", "value": "1", "level": "panic"}"#)
+        }
+    }
+
+    @Test func highlightsAreTheFirstRowAndAlerts() {
+        let rows = [
+            CommandStatus(title: "A", value: "1", level: .warning),
+            CommandStatus(title: "B", value: "2", level: .ok),
+            CommandStatus(title: "C", value: "3"),
+            CommandStatus(title: "D", value: "4", level: .critical),
+            CommandStatus(title: "E", value: "5", highlight: true),
+            CommandStatus(title: "F", value: "6", highlight: false),
+        ]
+        #expect(rows.highlights.map(\.title) == ["A", "D", "E"])
+        #expect([CommandStatus]().highlights.isEmpty)
     }
 
     @Test func rejectsOutputWithoutAStatusLine() {
@@ -26,7 +54,7 @@ import Testing
 
     @Test func runsTheCommandInZsh() async throws {
         let status = try await CommandRunner.run(#"print 'noise'; print '{"title":"T","value":"'$((6*7))'"}'"#)
-        #expect(status.value == "42")
+        #expect(status.map(\.value) == ["42"])
     }
 
     @Test func reportsTheLastStderrLineOnFailure() async {
@@ -54,8 +82,8 @@ import Testing
     @Test @MainActor func noCommandMeansNoRow() async {
         let store = store(command: "  ")
         await store.refreshCommand()
-        #expect(!store.showsCommandRow)
-        #expect(store.commandStatus == nil)
+        #expect(!store.showsCommandRows)
+        #expect(store.commandRows.isEmpty)
     }
 
     @Test @MainActor func keepsTheLastValueWhenTheCommandFails() async {
@@ -63,23 +91,23 @@ import Testing
         let marker = FileManager.default.temporaryDirectory.appendingPathComponent("claude-usage-test-fail")
         try? FileManager.default.removeItem(at: marker)
         await store.refreshCommand()
-        #expect(store.showsCommandRow)
-        #expect(store.commandStatus?.value == "1")
+        #expect(store.showsCommandRows)
+        #expect(store.commandRows.map(\.value) == ["1"])
 
         FileManager.default.createFile(atPath: marker.path, contents: nil)
         defer { try? FileManager.default.removeItem(at: marker) }
         await store.refreshCommand()
-        #expect(store.commandStatus?.value == "1")
+        #expect(store.commandRows.map(\.value) == ["1"])
         #expect(store.commandError == .failed(status: 1, message: ""))
     }
 
     @Test @MainActor func skipsAFreshValue() async {
         let store = store(command: #"print "{\"title\":\"T\",\"value\":\"$RANDOM$RANDOM\"}""#)
         await store.refreshCommand()
-        let first = store.commandStatus
+        let first = store.commandRows
         await store.refreshCommand(maxAge: 300)
-        #expect(store.commandStatus == first)
+        #expect(store.commandRows == first)
         await store.refreshCommand()
-        #expect(store.commandStatus != first)
+        #expect(store.commandRows != first)
     }
 }

@@ -33,6 +33,7 @@
 "Quit" = "Beenden";
 "Floating window" = "Schwebendes Fenster";
 "Percentages in the menu bar" = "Prozente in der Menüleiste";
+"Custom rows in the menu bar" = "Zusatzzeilen in der Menüleiste";
 "Launch at login" = "Beim Login starten";
 
 /* Custom row */

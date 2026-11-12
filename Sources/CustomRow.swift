@@ -1,14 +1,31 @@
 import Foundation
 
-/// One extra row fed by a user-configured shell command, e.g. tracked working time.
-/// The command prints a JSON object as its last non-empty stdout line:
+/// Extra rows fed by a user-configured shell command, e.g. tracked working time.
+/// The command prints a JSON object, or an array of them for several rows, as its last non-empty stdout line:
 /// `{"title": "Today", "value": "4:05h", "detail": "2 sessions active", "active": true}`.
 struct CommandStatus: Equatable, Decodable {
+    enum Level: String, Equatable, Decodable {
+        case ok, warning, critical
+    }
+
     let title: String
     let value: String
-    let detail: String?
+    var detail: String? = nil
     /// Shown as a green (true) or gray (false) dot; no dot when missing.
-    let active: Bool?
+    var active: Bool? = nil
+    /// `warning` and `critical` color the dot and the value, and keep the row visible in the compact views.
+    var level: Level? = nil
+    /// Keeps the row in the compact pill and the menu bar even without an alert.
+    var highlight: Bool? = nil
+
+    var isAlert: Bool { level == .warning || level == .critical }
+}
+
+extension [CommandStatus] {
+    /// What the compact pill and the menu bar show: the first row plus every highlighted or alerting row.
+    var highlights: [CommandStatus] {
+        enumerated().filter { $0.offset == 0 || $0.element.isAlert || $0.element.highlight == true }.map(\.element)
+    }
 }
 
 enum CommandError: LocalizedError, Equatable {
@@ -31,18 +48,25 @@ enum CommandError: LocalizedError, Equatable {
 }
 
 enum CommandRunner {
-    static func parse(_ output: String) throws -> CommandStatus {
+    static func parse(_ output: String) throws -> [CommandStatus] {
         let line = output.split(whereSeparator: \.isNewline)
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .last { !$0.isEmpty }
-        guard let line, let status = try? JSONDecoder().decode(CommandStatus.self, from: Data(line.utf8))
-        else { throw CommandError.invalidOutput }
-        return status
+        guard let data = line.map({ Data($0.utf8) }) else { throw CommandError.invalidOutput }
+        let decoder = JSONDecoder()
+        if let rows = try? decoder.decode([CommandStatus].self, from: data) { return rows }
+        guard let row = try? decoder.decode(CommandStatus.self, from: data) else { throw CommandError.invalidOutput }
+        return [row]
     }
 
-    /// Runs `command` with `/bin/zsh -c` off the main thread.
-    static func run(_ command: String, timeout: TimeInterval = 30) async throws -> CommandStatus {
-        let output = try await Task.detached { try execute(command, timeout: timeout) }.value
+    /// Runs `command` with `/bin/zsh -c` on a GCD thread: `execute` blocks until the command ends,
+    /// which must not tie up a thread of Swift's small cooperative pool.
+    static func run(_ command: String, timeout: TimeInterval = 30) async throws -> [CommandStatus] {
+        let output = try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(with: Result { try execute(command, timeout: timeout) })
+            }
+        }
         return try parse(output)
     }
 

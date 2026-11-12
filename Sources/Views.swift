@@ -140,9 +140,9 @@ struct UsageCard: View {
                 UsageRow(title: String(localized: "Session (5 h)"), window: store.session, now: now)
             }
             UsageRow(title: String(localized: "Week (7 d)"), window: store.weekly, now: now)
-            if store.showsCommandRow {
+            if store.showsCommandRows {
                 Divider().opacity(0.6)
-                CommandRow(status: store.commandStatus, error: store.commandError)
+                CommandRows(rows: store.commandRows, error: store.commandError)
             }
             if let error = store.error {
                 Text(error.localizedDescription)
@@ -154,13 +154,42 @@ struct UsageCard: View {
     }
 }
 
-struct ActivityDot: View {
-    let active: Bool
+extension CommandStatus {
+    /// Alert levels win over the activity state; nil means no dot.
+    var dotColor: Color? {
+        switch level {
+        case .critical: .critical
+        case .warning: .warning
+        case .ok, nil: active.map { $0 ? .running : Color.primary.opacity(0.3) }
+        }
+    }
+
+    var valueColor: Color? { isAlert ? dotColor : nil }
+}
+
+struct StatusDot: View {
+    let color: Color
 
     var body: some View {
-        Circle()
-            .fill(active ? Color.running : Color.primary.opacity(0.3))
-            .frame(width: 7, height: 7)
+        Circle().fill(color).frame(width: 7, height: 7)
+    }
+}
+
+/// The command's rows; before the first run a single placeholder row. The error goes below the last row.
+struct CommandRows: View {
+    let rows: [CommandStatus]
+    let error: CommandError?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if rows.isEmpty {
+                CommandRow(status: nil, error: error)
+            } else {
+                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                    CommandRow(status: row, error: index == rows.count - 1 ? error : nil)
+                }
+            }
+        }
     }
 }
 
@@ -171,8 +200,8 @@ struct CommandRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                if let active = status?.active {
-                    ActivityDot(active: active).alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                if let color = status?.dotColor {
+                    StatusDot(color: color).alignmentGuide(.firstTextBaseline) { $0[.bottom] }
                 }
                 Text(status?.title ?? String(localized: "Custom row"))
                     .font(.system(size: 11, weight: .medium))
@@ -182,6 +211,7 @@ struct CommandRow: View {
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
+                    .foregroundStyle(status?.valueColor ?? .primary)
             }
             Group {
                 if let error {
@@ -223,11 +253,11 @@ struct CompactPill: View {
                 separator
             }
             item(label: String(localized: "7d"), window: store.weekly)
-            if let status = store.commandStatus {
+            ForEach(Array(store.commandRows.highlights.enumerated()), id: \.offset) { _, row in
                 separator
                 HStack(spacing: 5) {
-                    if let active = status.active { ActivityDot(active: active) }
-                    Text(status.value)
+                    if let color = row.dotColor { StatusDot(color: color) }
+                    Text(row.value).foregroundStyle(row.valueColor ?? .primary).fixedSize()
                 }
             }
         }
@@ -242,8 +272,9 @@ struct CompactPill: View {
     private func item(label: String, window: UsageWindow?) -> some View {
         HStack(spacing: 5) {
             MiniRing(window: window, now: now)
-            Text(Format.percent(window))
-            Text(label).font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary)
+            // fixedSize: the HStack can hand a text a fraction of a point less than it needs, which wraps its last character.
+            Text(Format.percent(window)).fixedSize()
+            Text(label).font(.system(size: 9, weight: .medium)).foregroundStyle(.tertiary).fixedSize()
         }
     }
 }
@@ -318,15 +349,25 @@ struct MenuBarLabel: View {
 
     var body: some View {
         let icon = Image(systemName: Self.gaugeSymbol(for: (store.showsSession ? store.session : store.weekly)?.percent))
-        if store.showPercentInMenuBar, store.session != nil || store.weekly != nil {
-            if store.showsSession {
-                Text("\(icon) \(Format.percent(store.session)) · \(Format.percent(store.weekly))")
-            } else {
-                Text("\(icon) \(Format.percent(store.weekly))")
-            }
-        } else {
+        let parts = textParts
+        if parts.isEmpty {
             icon
+        } else {
+            Text("\(icon) \(parts.joined(separator: " · "))")
         }
+    }
+
+    /// Menu bar items are template images, so alert rows get a symbol instead of a color.
+    private var textParts: [String] {
+        var parts: [String] = []
+        if store.showPercentInMenuBar, store.session != nil || store.weekly != nil {
+            if store.showsSession { parts.append(Format.percent(store.session)) }
+            parts.append(Format.percent(store.weekly))
+        }
+        if store.showCommandInMenuBar {
+            parts += store.commandRows.highlights.map { $0.isAlert ? "⚠︎ \($0.value)" : $0.value }
+        }
+        return parts
     }
 
     private static func gaugeSymbol(for percent: Double?) -> String {
@@ -354,6 +395,9 @@ struct MenuContent: View {
             VStack(alignment: .leading, spacing: 8) {
                 Toggle("Floating window", isOn: $store.showFloating)
                 Toggle("Percentages in the menu bar", isOn: $store.showPercentInMenuBar)
+                if store.customCommand != nil {
+                    Toggle("Custom rows in the menu bar", isOn: $store.showCommandInMenuBar)
+                }
                 Toggle("Launch at login", isOn: Binding(get: { launchAtLogin }, set: setLaunchAtLogin))
                 if let loginError {
                     Text(loginError).font(.system(size: 10)).foregroundStyle(Color.critical)
