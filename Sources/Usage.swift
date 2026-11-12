@@ -172,6 +172,9 @@ final class UsageStore: ObservableObject {
     @Published var showPercentInMenuBar: Bool { didSet { defaults.set(showPercentInMenuBar, forKey: Keys.menuBarText) } }
     @Published var compact: Bool { didSet { defaults.set(compact, forKey: Keys.compact) } }
 
+    /// Plans without a 5-hour window get `five_hour: null`; until the first successful fetch both rows stay as placeholders.
+    var showsSession: Bool { session != nil || lastUpdate == nil }
+
     private let defaults: UserDefaults
     private let refreshInterval: TimeInterval = 120
     private var backoff = Backoff()

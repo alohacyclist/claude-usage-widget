@@ -62,6 +62,18 @@ private func session(_ percent: Double, elapsed: TimeInterval) -> UsageWindow {
         #expect(result.session == nil)
         #expect(result.weekly == nil)
     }
+
+    @Test @MainActor func planWithoutSessionWindowHidesTheSessionRow() throws {
+        let json = #"{"five_hour": null, "seven_day": {"utilization": 15.0, "resets_at": "2026-11-13T16:00:00.261959+00:00"}}"#
+        let result = try UsageAPI.decode(Data(json.utf8))
+        #expect(result.session == nil)
+        let store = UsageStore.sample(session: result.session, weekly: result.weekly, updated: Date())
+        #expect(!store.showsSession)
+    }
+
+    @Test @MainActor func sessionRowStaysAsPlaceholderBeforeTheFirstFetch() {
+        #expect(UsageStore(defaults: UserDefaults(suiteName: "test") ?? .standard).showsSession)
+    }
 }
 
 @Suite struct BackoffTests {

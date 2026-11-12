@@ -135,7 +135,9 @@ struct UsageCard: View {
                     Text(Format.ago(lastUpdate, now: now)).font(.system(size: 10)).foregroundStyle(.tertiary)
                 }
             }
-            UsageRow(title: String(localized: "Session (5 h)"), window: store.session, now: now)
+            if store.showsSession {
+                UsageRow(title: String(localized: "Session (5 h)"), window: store.session, now: now)
+            }
             UsageRow(title: String(localized: "Week (7 d)"), window: store.weekly, now: now)
             if let error = store.error {
                 Text(error.localizedDescription)
@@ -169,8 +171,10 @@ struct CompactPill: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            item(label: String(localized: "5h"), window: store.session)
-            Rectangle().fill(Color.primary.opacity(0.15)).frame(width: 1, height: 14)
+            if store.showsSession {
+                item(label: String(localized: "5h"), window: store.session)
+                Rectangle().fill(Color.primary.opacity(0.15)).frame(width: 1, height: 14)
+            }
             item(label: String(localized: "7d"), window: store.weekly)
         }
         .font(.system(size: 12, weight: .semibold, design: .rounded))
@@ -255,9 +259,13 @@ struct MenuBarLabel: View {
     @ObservedObject var store: UsageStore
 
     var body: some View {
-        let icon = Image(systemName: Self.gaugeSymbol(for: store.session?.percent))
+        let icon = Image(systemName: Self.gaugeSymbol(for: (store.showsSession ? store.session : store.weekly)?.percent))
         if store.showPercentInMenuBar, store.session != nil || store.weekly != nil {
-            Text("\(icon) \(Format.percent(store.session)) · \(Format.percent(store.weekly))")
+            if store.showsSession {
+                Text("\(icon) \(Format.percent(store.session)) · \(Format.percent(store.weekly))")
+            } else {
+                Text("\(icon) \(Format.percent(store.weekly))")
+            }
         } else {
             icon
         }
