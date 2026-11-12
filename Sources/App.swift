@@ -83,8 +83,15 @@ final class FloatingPanel: NSPanel {
         hidesOnDeactivate = false
         anchor = UserDefaults.standard.string(forKey: Self.anchorKey).map(NSPointFromString)
 
-        let host = NSHostingController(rootView: rootView)
-        host.sizingOptions = [.preferredContentSize]
+        // Letting the hosting controller resize the window (sizingOptions) does so from inside the layout
+        // pass, and a width change there (compact pill growing) crashes AppKit's constraint engine.
+        // So measure the content and resize once that pass is over. fixedSize measures the ideal size;
+        // under the window's current size as proposal the content would squeeze and the window never grow.
+        let measured = rootView.fixedSize().onGeometryChange(for: CGSize.self) { $0.size } action: { [weak self] size in
+            DispatchQueue.main.async { self?.fit(size) }
+        }
+        let host = NSHostingController(rootView: measured)
+        host.sizingOptions = []
         contentViewController = host
 
         moveObserver = NotificationCenter.default.addObserver(
@@ -104,6 +111,11 @@ final class FloatingPanel: NSPanel {
         }
         super.setFrame(rect, display: flag)
         invalidateShadow()
+    }
+
+    private func fit(_ size: CGSize) {
+        guard size.width > 0, size != frame.size else { return }
+        setFrame(NSRect(origin: frame.origin, size: size), display: true)
     }
 
     /// First launch, a detached display or a stale anchor: move to the top right of the menu-bar screen.
