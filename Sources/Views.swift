@@ -6,6 +6,7 @@ extension Color {
     static let claude = Color(red: 0.85, green: 0.47, blue: 0.34)
     static let warning = Color(red: 0.98, green: 0.74, blue: 0.24)
     static let critical = Color(red: 0.94, green: 0.33, blue: 0.31)
+    static let running = Color(red: 0.36, green: 0.78, blue: 0.47)
 }
 
 extension UsageWindow {
@@ -139,12 +140,58 @@ struct UsageCard: View {
                 UsageRow(title: String(localized: "Session (5 h)"), window: store.session, now: now)
             }
             UsageRow(title: String(localized: "Week (7 d)"), window: store.weekly, now: now)
+            if store.showsCommandRow {
+                Divider().opacity(0.6)
+                CommandRow(status: store.commandStatus, error: store.commandError)
+            }
             if let error = store.error {
                 Text(error.localizedDescription)
                     .font(.system(size: 10))
                     .foregroundStyle(Color.critical)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+struct ActivityDot: View {
+    let active: Bool
+
+    var body: some View {
+        Circle()
+            .fill(active ? Color.running : Color.primary.opacity(0.3))
+            .frame(width: 7, height: 7)
+    }
+}
+
+struct CommandRow: View {
+    let status: CommandStatus?
+    let error: CommandError?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if let active = status?.active {
+                    ActivityDot(active: active).alignmentGuide(.firstTextBaseline) { $0[.bottom] }
+                }
+                Text(status?.title ?? String(localized: "Custom row"))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(status?.value ?? "–")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+            Group {
+                if let error {
+                    Text(error.localizedDescription).foregroundStyle(Color.critical)
+                } else if let detail = status?.detail {
+                    Text(detail).foregroundStyle(.secondary)
+                }
+            }
+            .font(.system(size: 10))
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -173,12 +220,23 @@ struct CompactPill: View {
         HStack(spacing: 10) {
             if store.showsSession {
                 item(label: String(localized: "5h"), window: store.session)
-                Rectangle().fill(Color.primary.opacity(0.15)).frame(width: 1, height: 14)
+                separator
             }
             item(label: String(localized: "7d"), window: store.weekly)
+            if let status = store.commandStatus {
+                separator
+                HStack(spacing: 5) {
+                    if let active = status.active { ActivityDot(active: active) }
+                    Text(status.value)
+                }
+            }
         }
         .font(.system(size: 12, weight: .semibold, design: .rounded))
         .monospacedDigit()
+    }
+
+    private var separator: some View {
+        Rectangle().fill(Color.primary.opacity(0.15)).frame(width: 1, height: 14)
     }
 
     private func item(label: String, window: UsageWindow?) -> some View {
@@ -243,7 +301,7 @@ struct FloatingView: View {
             .gesture(WindowDragGesture())
             .onTapGesture(count: 2) { store.compact.toggle() }
             .contextMenu {
-                Button("Refresh") { Task { await store.refresh() } }
+                Button("Refresh") { Task { await store.refreshAll() } }
                 Button(store.compact ? LocalizedStringKey("Show details") : "Show compact") { store.compact.toggle() }
                 Divider()
                 Button("Hide window") { store.showFloating = false }
@@ -305,7 +363,7 @@ struct MenuContent: View {
             .controlSize(.small)
             Divider()
             HStack {
-                Button("Refresh") { Task { await store.refresh() } }
+                Button("Refresh") { Task { await store.refreshAll() } }
                 Spacer()
                 Button("Quit") { NSApp.terminate(nil) }
             }

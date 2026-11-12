@@ -167,6 +167,8 @@ final class UsageStore: ObservableObject {
     @Published private(set) var lastUpdate: Date?
     @Published private(set) var error: UsageError?
     @Published private(set) var isLoading = false
+    @Published private(set) var commandStatus: CommandStatus?
+    @Published private(set) var commandError: CommandError?
 
     @Published var showFloating: Bool { didSet { defaults.set(showFloating, forKey: Keys.showFloating) } }
     @Published var showPercentInMenuBar: Bool { didSet { defaults.set(showPercentInMenuBar, forKey: Keys.menuBarText) } }
@@ -174,16 +176,26 @@ final class UsageStore: ObservableObject {
 
     /// Plans without a 5-hour window get `five_hour: null`; until the first successful fetch both rows stay as placeholders.
     var showsSession: Bool { session != nil || lastUpdate == nil }
+    var showsCommandRow: Bool { customCommand != nil || commandStatus != nil }
+
+    /// Shell command for the extra row; set with `defaults write`, read once at launch.
+    let customCommand: String?
 
     private let defaults: UserDefaults
     private let refreshInterval: TimeInterval = 120
+    private let commandInterval: TimeInterval
     private var backoff = Backoff()
     private var timer: Timer?
+    private var commandTimer: Timer?
+    private var commandUpdate: Date?
+    private var isRunningCommand = false
 
-    private enum Keys {
+    enum Keys {
         static let showFloating = "showFloating"
         static let menuBarText = "showPercentInMenuBar"
         static let compact = "compact"
+        static let customCommand = "customRowCommand"
+        static let customInterval = "customRowInterval"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -191,14 +203,20 @@ final class UsageStore: ObservableObject {
         showFloating = defaults.object(forKey: Keys.showFloating) as? Bool ?? true
         showPercentInMenuBar = defaults.object(forKey: Keys.menuBarText) as? Bool ?? true
         compact = defaults.object(forKey: Keys.compact) as? Bool ?? false
+        let command = defaults.string(forKey: Keys.customCommand)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        customCommand = command?.isEmpty == false ? command : nil
+        commandInterval = max(defaults.object(forKey: Keys.customInterval) as? Double ?? 3600, 60)
     }
 
     /// Fixed data for screenshots and previews; never polls.
-    static func sample(session: UsageWindow?, weekly: UsageWindow?, updated: Date) -> UsageStore {
+    static func sample(
+        session: UsageWindow?, weekly: UsageWindow?, updated: Date, command: CommandStatus? = nil
+    ) -> UsageStore {
         let store = UsageStore(defaults: UserDefaults(suiteName: "sample") ?? .standard)
         store.session = session
         store.weekly = weekly
         store.lastUpdate = updated
+        store.commandStatus = command
         return store
     }
 
@@ -209,14 +227,45 @@ final class UsageStore: ObservableObject {
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in await self?.refresh() }
+            Task { @MainActor in await self?.refreshAll(commandMaxAge: 300) }
         }
-        Task { await refresh() }
+        if customCommand != nil {
+            commandTimer = Timer.scheduledTimer(withTimeInterval: commandInterval, repeats: true) { [weak self] _ in
+                Task { @MainActor in await self?.refreshCommand() }
+            }
+        }
+        Task { await refreshAll() }
     }
 
+    /// Opening the menu refreshes usage after 30 s and the command row after 5 min.
     func refreshIfStale(maxAge: TimeInterval = 30) async {
-        if let lastUpdate, Date().timeIntervalSince(lastUpdate) < maxAge { return }
+        async let command: Void = refreshCommand(maxAge: 300)
+        if lastUpdate == nil || Date().timeIntervalSince(lastUpdate ?? .distantPast) >= maxAge {
+            await refresh()
+        }
+        await command
+    }
+
+    func refreshAll(commandMaxAge: TimeInterval = 0) async {
+        async let command: Void = refreshCommand(maxAge: commandMaxAge)
         await refresh()
+        await command
+    }
+
+    func refreshCommand(maxAge: TimeInterval = 0) async {
+        guard let customCommand, !isRunningCommand else { return }
+        if let commandUpdate, Date().timeIntervalSince(commandUpdate) < maxAge { return }
+        isRunningCommand = true
+        defer { isRunningCommand = false }
+        do {
+            commandStatus = try await CommandRunner.run(customCommand)
+            commandError = nil
+        } catch let error as CommandError {
+            commandError = error
+        } catch {
+            commandError = .failed(status: -1, message: error.localizedDescription)
+        }
+        commandUpdate = Date()
     }
 
     func refresh() async {

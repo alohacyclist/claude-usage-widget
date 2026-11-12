@@ -9,7 +9,7 @@ let package = Package(
         .target(
             name: "UsageCore",
             path: "Sources",
-            sources: ["Usage.swift"],
+            sources: ["Usage.swift", "CustomRow.swift"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(

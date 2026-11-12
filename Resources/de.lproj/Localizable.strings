@@ -34,3 +34,10 @@
 "Floating window" = "Schwebendes Fenster";
 "Percentages in the menu bar" = "Prozente in der Menüleiste";
 "Launch at login" = "Beim Login starten";
+
+/* Custom row */
+"Custom row" = "Zusatzzeile";
+"Command failed with exit code %lld." = "Befehl mit Exit-Code %lld fehlgeschlagen.";
+"Command failed: %@" = "Befehl fehlgeschlagen: %@";
+"Command took longer than %lld s." = "Befehl brauchte länger als %lld s.";
+"Command printed no JSON status line." = "Befehl hat keine JSON-Statuszeile ausgegeben.";
