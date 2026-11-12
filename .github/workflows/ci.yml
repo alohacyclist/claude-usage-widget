@@ -13,9 +13,20 @@ concurrency:
 jobs:
   build:
     runs-on: macos-15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Test
-        run: swift test
+      - name: Build tests
+        run: swift build --build-tests
+      # Split so a hang shows which suite it is in; output of a killed run is lost.
+      - name: Test pure logic
+        timeout-minutes: 5
+        run: swift test --skip-build --skip CommandRunnerTests --skip CommandStoreTests
+      - name: Test command runner
+        timeout-minutes: 5
+        run: swift test --skip-build --filter CommandRunnerTests
+      - name: Test command store
+        timeout-minutes: 5
+        run: swift test --skip-build --filter CommandStoreTests
       - name: Build
         run: ./build.sh
